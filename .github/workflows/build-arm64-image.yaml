@@ -35,8 +35,8 @@ jobs:
         run: |
           TAG=$(cat VERSION)
           echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-          docker tag pastens/kube-ovn:$TAG kubeovn/kube-ovn:$TAG-arm64
-          docker tag pastens/kube-ovn:$TAG kubeovn/kube-ovn:$COMMIT-arm64
+          docker tag kubeovn/kube-ovn:$TAG pastens/kube-ovn:$TAG-arm64
+          docker tag kubeovn/kube-ovn:$TAG pastens/kube-ovn:$COMMIT-arm64
           docker images
           docker push pastens/kube-ovn:$TAG-arm64
           docker push pastens/kube-ovn:$COMMIT-arm64

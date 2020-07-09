@@ -71,6 +71,7 @@ jobs:
         run: |
           cat VERSION
           TAG=$(cat VERSION)
+          export DOCKER_CLI_EXPERIMENTAL=enabled
           echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
           docker tag kubeovn/kube-ovn:$TAG pastens/kube-ovn:$TAG-amd64
           docker tag kubeovn/kube-ovn:$TAG pastens/kube-ovn:$COMMIT-amd64

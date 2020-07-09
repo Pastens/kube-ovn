@@ -41,3 +41,4 @@ jobs:
           docker push pastens/kube-ovn:$TAG-arm64
           docker push pastens/kube-ovn:$COMMIT-arm64
           docker manifest create pastens/kube-ovn:$TAG --amend pastens/kube-ovn:$TAG-arm64
+          docker manifest push pastens/kube-ovn:$TAG

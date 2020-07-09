@@ -68,6 +68,7 @@ kind-init-ha:
 	kind delete cluster --name=kube-ovn
 	kind create cluster --config yamls/kind-ha.yaml --name kube-ovn
 	kind load docker-image --name kube-ovn ${REGISTRY}/kube-ovn:${RELEASE_TAG}
+	kubectl taint node kube-ovn-control-plane node-role.kubernetes.io/master:NoSchedule-
 	bash dist/images/install.sh
 
 kind-reload:
@@ -81,6 +82,8 @@ uninstall:
 	bash dist/images/cleanup.sh
 
 e2e:
+	docker pull nginx:alpine
+	kind load docker-image --name kube-ovn nginx:alpine
 	ginkgo -p --slowSpecThreshold=60 test/e2e
 
 ut:

@@ -78,3 +78,4 @@ jobs:
           docker push pastens/kube-ovn:$TAG-amd64
           docker push pastens/kube-ovn:$COMMIT-amd64
           docker manifest create pastens/kube-ovn:$TAG --amend pastens/kube-ovn:$TAG-amd64
+          docker manifest push pastens/kube-ovn:$TAG

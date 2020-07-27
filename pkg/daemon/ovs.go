@@ -102,9 +102,6 @@ func configureHostNic(nicName, vlanID string, macAddr net.HardwareAddr) error {
 		return fmt.Errorf("can not find host nic %s %v", nicName, err)
 	}
 
-	if err = netlink.LinkSetHardwareAddr(hostLink, macAddr); err != nil {
-		return fmt.Errorf("can not set mac address to host nic %s %v", nicName, err)
-	}
 	if hostLink.Attrs().OperState != netlink.OperUp {
 		if err = netlink.LinkSetUp(hostLink); err != nil {
 			return fmt.Errorf("can not set host nic %s up %v", nicName, err)
@@ -220,6 +217,15 @@ func configureNodeNic(portName, ip, gw string, macAddr net.HardwareAddr, mtu int
 
 	if err = configureNic(util.NodeNic, ip, macAddr, mtu); err != nil {
 		return err
+	}
+
+	hostLink, err := netlink.LinkByName(util.NodeNic)
+	if err != nil {
+		return fmt.Errorf("can not find nic %s %v", util.NodeNic, err)
+	}
+
+	if err = netlink.LinkSetTxQLen(hostLink, 1000); err != nil {
+		return fmt.Errorf("can not set host nic %s qlen %v", util.NodeNic, err)
 	}
 
 	// ping gw to activate the flow
@@ -366,6 +372,7 @@ func setupSriovInterface(containerID, deviceID string, mtu int) (string, string,
 	// 1. get VF netdevice from PCI
 	vfNetdevices, err := sriovnet.GetNetDevicesFromPci(deviceID)
 	if err != nil {
+		klog.Errorf("failed to get vf netdevice %s, %v", deviceID, err)
 		return "", "", err
 	}
 
@@ -378,18 +385,21 @@ func setupSriovInterface(containerID, deviceID string, mtu int) (string, string,
 	// 2. get Uplink netdevice
 	uplink, err := sriovnet.GetUplinkRepresentor(deviceID)
 	if err != nil {
+		klog.Errorf("failed to get up %s link device, %v", deviceID, err)
 		return "", "", err
 	}
 
 	// 3. get VF index from PCI
 	vfIndex, err := sriovnet.GetVfIndexByPciAddress(deviceID)
 	if err != nil {
+		klog.Errorf("failed to get vf %s index, %v", deviceID, err)
 		return "", "", err
 	}
 
 	// 4. lookup representor
 	rep, err := sriovnet.GetVfRepresentor(uplink, vfIndex)
 	if err != nil {
+		klog.Errorf("failed to get vf %d representor, %v", vfIndex, err)
 		return "", "", err
 	}
 	oldHostRepName := rep

@@ -1,12 +1,12 @@
 # NOTE: At time of writing, CentOS 8 does not have dpdk-devel v19.11 in the Yum repo.
 # This package is required to build the OVS-DPDK RPMs and is available in Fedora 32.
 FROM fedora:32 as dpdk
-
+ENV BUILD_DATE 20200731
 ENV RPM_ARCH=x86_64
 
 ENV DPDK_VERSION=19.11.1
 ENV OVS_VERSION=2.13.0
-ENV OVN_VERSION=20.03
+ENV OVN_VERSION=20.06
 
 ENV DPDK_DIR=/usr/src/dpdk-stable-${DPDK_VERSION}
 ENV OVS_DIR=/usr/src/openvswitch-${OVS_VERSION}
@@ -29,7 +29,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
   curl http://fast.dpdk.org/rel/dpdk-${DPDK_VERSION}.tar.gz | tar xz && \
   cd ${DPDK_DIR} && \
   meson builddir && cd builddir && \
-  meson configure -Dexamples='' -Dtests=false -Denable_kmods=false -Denable_docs=false && \
+  meson configure -Dapps='pdump proc-info' -Dexamples='' -Dtests=false -Denable_kmods=false -Denable_docs=false && \
   ninja && ninja install && \
 # Clean Up
   dnf remove -y make meson gcc cpp && \
@@ -53,7 +53,7 @@ RUN cd /usr/src/ && \
 
 # Build OVN
 RUN cd /usr/src/ && \
-  curl -L https://github.com/ovn-org/ovn/tarball/branch-20.03 > ovn.tar.gz && \
+  curl -L https://github.com/ovn-org/ovn/tarball/branch-${OVN_VERSION} > ovn.tar.gz && \
   mkdir ovn && tar -xf ovn.tar.gz -C ovn --strip-components 1 && \
   rm -f ovn.tar.gz && \
   cd ovn && \
@@ -69,6 +69,7 @@ RUN mkdir -p /rpms && \
 
 FROM dpdk
 
+RUN dnf install -y kmod && dnf clean all
 COPY --from=rpm-builder /rpms/* /rpms/
 COPY start-ovs-dpdk.sh ovs-dpdk-healthcheck.sh uninstall.sh /kube-ovn/
 

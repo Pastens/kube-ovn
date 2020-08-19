@@ -17,11 +17,11 @@ require (
 	github.com/hashicorp/go-version v1.2.0 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/intel/multus-cni v0.0.0-20200313031649-eaf6ff6e20bb
-	github.com/juju/errors v0.0.0-20190207033735-e65537c515d7
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0 // indirect
 	github.com/kubesphere/porter v0.1.1
 	github.com/moul/http2curl v1.0.0 // indirect
+	github.com/neverlee/keymutex v0.0.0-20171121013845-f593aa834bf9
 	github.com/oilbeater/go-ping v0.0.0-20200413021620-332b7197c5b5
 	github.com/onsi/ginkgo v1.12.0
 	github.com/onsi/gomega v1.9.0

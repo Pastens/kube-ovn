@@ -214,7 +214,7 @@ func (c *Controller) handleAddNode(key string) error {
 		return err
 	}
 
-	if err := c.ovnClient.CreatePort(c.config.NodeSwitch, portName, ip, subnet.Spec.CIDRBlock, mac, tag); err != nil {
+	if err := c.ovnClient.CreatePort(c.config.NodeSwitch, portName, ip, subnet.Spec.CIDRBlock, mac, tag, false); err != nil {
 		return err
 	}
 
@@ -312,7 +312,7 @@ func (c *Controller) handleAddNode(key string) error {
 
 func (c *Controller) handleDeleteNode(key string) error {
 	portName := fmt.Sprintf("node-%s", key)
-	if err := c.ovnClient.DeletePort(portName); err != nil {
+	if err := c.ovnClient.DeleteLogicalSwitchPort(portName); err != nil {
 		klog.Errorf("failed to delete node switch port node-%s %v", key, err)
 		return err
 	}

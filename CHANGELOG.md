@@ -1,12 +1,13 @@
 # CHANGELOG
 
-## 1.3.0 -- TBD
+## 1.3.0 -- 2020/7/31
 
 ### New Feature
-* Round-robbin IP allocation replaces small to big allocation
-* Support gateway QoS
-* Support session affinity service
-* Beta support for hardware offload
+* Hardware offload to boost performance in Bare-Metal environment
+* Assigning a specific pod as gateway
+* Central gateway QoS
+* Session affinity service
+* Round-robbin IP allocation to relieve IP conflict
 
 ### Security
 * Use gosec to audit code security
@@ -17,6 +18,7 @@
 * Missing package for arm images
 * Node annotation overwrite incorrectly
 * Create/Delete order might lead ip conflict
+* Add MSS rules to resolve MTU issues
 
 ### Monitoring
 * kubectl-ko support ovs-tracing
@@ -25,9 +27,11 @@
 ### Misc
 * Update OVN to 20.06
 * CRD version upgrade to v1
+* Optimize ARM build
 * Refactor ovs cmd with ovs.Exec
 * OVS-DPDK support config file
-* Reduce image size of ovs-dpdk
+* Add DPDK tools in OVS_DPDK image
+* Reduce image size of OVS-DPDK
 
 ## v1.2.1 -- 2020/06/22
 This release fix bugs found in v1.2.0

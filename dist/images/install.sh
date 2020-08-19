@@ -22,7 +22,7 @@ EXCLUDE_IPS=""                         # EXCLUDE_IPS for default subnet
 LABEL="node-role.kubernetes.io/master" # The node label to deploy OVN DB
 IFACE=""                               # The nic to support container network, if empty will use the nic that the default route use
 NETWORK_TYPE="geneve"                  # geneve or vlan
-VERSION="v1.3.0"
+VERSION="v1.4.0"
 IMAGE_PULL_POLICY="IfNotPresent"
 HW_OFFLOAD="false"
 
@@ -589,7 +589,7 @@ spec:
       hostPID: true
       containers:
         - name: openvswitch
-          image: "kubeovn/kube-ovn-dpdk:$DPDK_VERSION"
+          image: "kubeovn/kube-ovn-dpdk:$DPDK_VERSION-$VERSION"
           imagePullPolicy: $IMAGE_PULL_POLICY
           command: ["/kube-ovn/start-ovs-dpdk.sh"]
           securityContext:
@@ -1432,7 +1432,6 @@ tcpdump(){
     hostNetwork=$(kubectl get pod "$podName" -o jsonpath={.spec.hostNetwork})
   else
     nodeName=$(kubectl get pod "$podName" -n "$namespace" -o jsonpath={.spec.nodeName})
-    mac=$(kubectl get pod "$podName" -n "$namespace" -o jsonpath={.metadata.annotations.ovn\\.kubernetes\\.io/mac_address})
     hostNetwork=$(kubectl get pod "$podName" -n "$namespace" -o jsonpath={.spec.hostNetwork})
   fi
 
@@ -1440,12 +1439,6 @@ tcpdump(){
     echo "Pod $namespacedPod not exists on any node"
     exit 1
   fi
-
-  if [ -z "$mac" ] && [ "$hostNetwork" != "true" ]; then
-     echo "pod mac address not ready"
-     exit 1
-  fi
-  mac=$(echo "$mac" | tr '[:upper:]' '[:lower:]')
 
   ovnCni=$(kubectl get pod -n $KUBE_OVN_NS -o wide| grep kube-ovn-cni| grep " $nodeName " | awk '{print $1}')
   if [ -z "$ovnCni" ]; then
@@ -1457,7 +1450,7 @@ tcpdump(){
     set -x
     kubectl exec -it "$ovnCni" -n $KUBE_OVN_NS -- tcpdump -nn "$@"
   else
-    nicName=$(kubectl exec -it "$ovnCni" -n $KUBE_OVN_NS -- ovs-vsctl --data=bare --no-heading --columns=name find interface mac_in_use="${mac//:/\\:}" | tr -d '\r')
+    nicName=$(kubectl exec -it "$ovnCni" -n $KUBE_OVN_NS -- ovs-vsctl --data=bare --no-heading --columns=name find interface external-ids:iface-id="$podName"."$namespace" | tr -d '\r')
     if [ -z "$nicName" ]; then
       echo "nic doesn't exist on node $nodeName"
       exit 1
@@ -1560,7 +1553,7 @@ vsctl(){
   if [ -z "$ovsPod" ]; then
       echo "ovs pod  doesn't exist on node $nodeName"
       exit 1
-    fi
+  fi
   kubectl exec "$ovsPod" -n $KUBE_OVN_NS -- ovs-vsctl "$@"
 }
 
@@ -1576,7 +1569,6 @@ diagnose(){
   checkDaemonSet kube-ovn-cni
   checkDaemonSet ovs-ovn
   checkDeployment coredns
-
   type="$1"
   case $type in
     all)

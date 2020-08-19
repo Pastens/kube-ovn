@@ -13,7 +13,6 @@ import (
 	kubeovnv1 "github.com/alauda/kube-ovn/pkg/apis/kubeovn/v1"
 	"github.com/alauda/kube-ovn/pkg/ovs"
 	"github.com/alauda/kube-ovn/pkg/util"
-	"github.com/juju/errors"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -222,10 +221,13 @@ func (c *Controller) processNextAddPodWorkItem() bool {
 			utilruntime.HandleError(fmt.Errorf("expected string in workqueue but got %#v", obj))
 			return nil
 		}
+		klog.Infof("handle add pod %s", key)
 		if err := c.handleAddPod(key); err != nil {
 			c.addPodQueue.AddRateLimited(key)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
+		last := time.Since(now)
+		klog.Infof("take %d ms to handle add pod %s", last.Milliseconds(), key)
 		c.addPodQueue.Forget(obj)
 		return nil
 	}(obj)
@@ -234,8 +236,6 @@ func (c *Controller) processNextAddPodWorkItem() bool {
 		utilruntime.HandleError(err)
 		return true
 	}
-	last := time.Since(now)
-	klog.Infof("take %d ms to deal with add pod", last.Milliseconds())
 	return true
 }
 
@@ -256,11 +256,14 @@ func (c *Controller) processNextDeletePodWorkItem() bool {
 			utilruntime.HandleError(fmt.Errorf("expected string in workqueue but got %#v", obj))
 			return nil
 		}
+		klog.Infof("handle delete pod %s", key)
 		if err := c.handleDeletePod(key); err != nil {
 			c.deletePodQueue.AddRateLimited(key)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
 		c.deletePodQueue.Forget(obj)
+		last := time.Since(now)
+		klog.Infof("take %d ms to handle delete pod %s", last.Milliseconds(), key)
 		return nil
 	}(obj)
 
@@ -268,8 +271,6 @@ func (c *Controller) processNextDeletePodWorkItem() bool {
 		utilruntime.HandleError(err)
 		return true
 	}
-	last := time.Since(now)
-	klog.Infof("take %d ms to deal with delete pod", last.Milliseconds())
 	return true
 }
 
@@ -306,6 +307,8 @@ func (c *Controller) processNextUpdatePodWorkItem() bool {
 }
 
 func (c *Controller) handleAddPod(key string) error {
+	c.podKeyMutex.Lock(key)
+	defer c.podKeyMutex.Unlock(key)
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
@@ -373,7 +376,12 @@ func (c *Controller) handleAddPod(key string) error {
 			if err != nil {
 				return err
 			}
-			if err := c.ovnClient.CreatePort(subnet.Name, ovs.PodNameToPortName(name, namespace), ip, subnet.Spec.CIDRBlock, mac, tag); err != nil {
+
+			portSecurity := false
+			if pod.Annotations[util.PortSecurityAnnotation] == "true" {
+				portSecurity = true
+			}
+			if err := c.ovnClient.CreatePort(subnet.Name, ovs.PodNameToPortName(name, namespace), ip, subnet.Spec.CIDRBlock, mac, tag, portSecurity); err != nil {
 				c.recorder.Eventf(pod, v1.EventTypeWarning, "CreateOVNPortFailed", err.Error())
 				return err
 			}
@@ -394,6 +402,8 @@ func (c *Controller) handleAddPod(key string) error {
 }
 
 func (c *Controller) handleDeletePod(key string) error {
+	c.podKeyMutex.Lock(key)
+	defer c.podKeyMutex.Unlock(key)
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
@@ -412,7 +422,7 @@ func (c *Controller) handleDeletePod(key string) error {
 		}
 	}
 
-	if err := c.ovnClient.DeletePort(ovs.PodNameToPortName(name, namespace)); err != nil {
+	if err := c.ovnClient.DeleteLogicalSwitchPort(ovs.PodNameToPortName(name, namespace)); err != nil {
 		klog.Errorf("failed to delete lsp %s, %v", ovs.PodNameToPortName(name, namespace), err)
 		return err
 	}
@@ -429,6 +439,8 @@ func (c *Controller) handleDeletePod(key string) error {
 }
 
 func (c *Controller) handleUpdatePod(key string) error {
+	c.podKeyMutex.Lock(key)
+	defer c.podKeyMutex.Unlock(key)
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
@@ -450,21 +462,28 @@ func (c *Controller) handleUpdatePod(key string) error {
 		klog.Errorf("failed to get subnet %v", err)
 		return err
 	}
-
 	if !subnet.Spec.UnderlayGateway {
-		if subnet.Spec.GatewayType == kubeovnv1.GWDistributedType {
-			node, err := c.nodesLister.Get(pod.Spec.NodeName)
-			if err != nil {
-				klog.Errorf("get node %s failed %v", pod.Spec.NodeName, err)
+		if pod.Annotations[util.NorthGatewayAnnotation] != "" {
+			if err := c.ovnClient.AddStaticRoute(ovs.PolicySrcIP, podIP, pod.Annotations[util.NorthGatewayAnnotation], c.config.ClusterRouter); err != nil {
+				klog.Errorf("failed to add static route, %v", err)
 				return err
 			}
-			nodeTunlIPAddr, err := getNodeTunlIP(node)
-			if err != nil {
-				return err
-			}
+		} else {
+			if subnet.Spec.GatewayType == kubeovnv1.GWDistributedType {
+				node, err := c.nodesLister.Get(pod.Spec.NodeName)
+				if err != nil {
+					klog.Errorf("get node %s failed %v", pod.Spec.NodeName, err)
+					return err
+				}
+				nodeTunlIPAddr, err := getNodeTunlIP(node)
+				if err != nil {
+					return err
+				}
 
-			if err := c.ovnClient.AddStaticRoute(ovs.PolicySrcIP, podIP, nodeTunlIPAddr.String(), c.config.ClusterRouter); err != nil {
-				return errors.Annotate(err, "add static route failed")
+				if err := c.ovnClient.AddStaticRoute(ovs.PolicySrcIP, podIP, nodeTunlIPAddr.String(), c.config.ClusterRouter); err != nil {
+					klog.Errorf("failed to add static route, %v", err)
+					return err
+				}
 			}
 		}
 	}
@@ -495,7 +514,7 @@ func isStatefulSetPod(pod *v1.Pod) (bool, string) {
 func getNodeTunlIP(node *v1.Node) (net.IP, error) {
 	nodeTunlIP := node.Annotations[util.IpAddressAnnotation]
 	if nodeTunlIP == "" {
-		return nil, errors.New("node has no tunl ip annotation")
+		return nil, fmt.Errorf("node has no tunl ip annotation")
 	}
 	nodeTunlIPAddr := net.ParseIP(nodeTunlIP)
 	if nodeTunlIPAddr == nil {
